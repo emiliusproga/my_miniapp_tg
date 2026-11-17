@@ -15,7 +15,8 @@
       color: var(--tg-theme-text-color, #000000);
     }
     h1 { font-size: 22px; margin: 0 0 4px; }
-    #counter { color: var(--tg-theme-hint-color, #888888); margin: 0 0 16px; font-size: 14px; }
+    #counter { color: var(--tg-theme-hint-color, #888888); margin: 0 0 4px; font-size: 14px; }
+    #status { color: var(--tg-theme-hint-color, #888888); margin: 0 0 16px; font-size: 12px; }
     .add { display: flex; gap: 8px; margin-bottom: 16px; }
     input[type="text"] {
       flex: 1;
@@ -66,6 +67,7 @@
 <body>
   <h1 id="title">Мои дела</h1>
   <p id="counter"></p>
+  <p id="status"></p>
 
   <div class="add">
     <input type="text" id="input" placeholder="Новая задача..." maxlength="200">
@@ -85,18 +87,71 @@
       document.getElementById("title").textContent = "Дела: " + user.first_name;
     }
 
-    const KEY = "tasks_v1";
+    const LOCAL_KEY = "tasks_v1";
+    const PREFIX = "t_";
+    const hasCloud = !!(tg.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast("6.9"));
     let tasks = [];
-    try {
-      tasks = JSON.parse(localStorage.getItem(KEY)) || [];
-    } catch (e) {
-      tasks = [];
+
+    document.getElementById("status").textContent = hasCloud
+      ? "☁️ Синхронизация между устройствами включена"
+      : "Задачи хранятся только на этом устройстве";
+
+    // ---------- Хранилище ----------
+    function loadLocal() {
+      try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; }
+      catch (e) { return []; }
+    }
+    function saveLocal() {
+      try { localStorage.setItem(LOCAL_KEY, JSON.stringify(tasks)); } catch (e) {}
     }
 
-    function save() {
-      try { localStorage.setItem(KEY, JSON.stringify(tasks)); } catch (e) {}
+    function cloudGetKeys() {
+      return new Promise((resolve) => {
+        tg.CloudStorage.getKeys((err, keys) => resolve(err ? [] : (keys || [])));
+      });
+    }
+    function cloudGetItems(keys) {
+      return new Promise((resolve) => {
+        if (!keys.length) return resolve({});
+        tg.CloudStorage.getItems(keys, (err, values) => resolve(err ? {} : (values || {})));
+      });
     }
 
+    function persistTask(task) {
+      saveLocal();
+      if (hasCloud) tg.CloudStorage.setItem(PREFIX + task.id, JSON.stringify(task));
+    }
+    function removeTasks(ids) {
+      saveLocal();
+      if (hasCloud && ids.length) {
+        tg.CloudStorage.removeItems(ids.map((id) => PREFIX + id));
+      }
+    }
+
+    async function loadTasks() {
+      const local = loadLocal();
+      if (!hasCloud) {
+        tasks = local;
+        return;
+      }
+      const keys = (await cloudGetKeys()).filter((k) => k.startsWith(PREFIX));
+      const items = await cloudGetItems(keys);
+      const fromCloud = [];
+      Object.values(items).forEach((v) => {
+        try { fromCloud.push(JSON.parse(v)); } catch (e) {}
+      });
+
+      if (fromCloud.length === 0 && local.length > 0) {
+        // Первый запуск: переносим старые задачи в облако
+        tasks = local;
+        tasks.forEach((t) => tg.CloudStorage.setItem(PREFIX + t.id, JSON.stringify(t)));
+      } else {
+        tasks = fromCloud.sort((a, b) => b.id - a.id);
+        saveLocal();
+      }
+    }
+
+    // ---------- Интерфейс ----------
     function haptic(type) {
       if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred(type || "light");
     }
@@ -118,7 +173,7 @@
         cb.checked = task.done;
         cb.addEventListener("change", () => {
           task.done = cb.checked;
-          save(); haptic(); render();
+          persistTask(task); haptic(); render();
         });
 
         const text = document.createElement("span");
@@ -129,7 +184,7 @@
         del.textContent = "✕";
         del.addEventListener("click", () => {
           tasks = tasks.filter((t) => t.id !== task.id);
-          save(); haptic("medium"); render();
+          removeTasks([task.id]); haptic("medium"); render();
         });
 
         li.append(cb, text, del);
@@ -147,9 +202,10 @@
       const input = document.getElementById("input");
       const value = input.value.trim();
       if (!value) return;
-      tasks.unshift({ id: Date.now(), text: value, done: false });
+      const task = { id: Date.now(), text: value, done: false };
+      tasks.unshift(task);
       input.value = "";
-      save(); haptic(); render();
+      persistTask(task); haptic(); render();
     }
 
     document.getElementById("addBtn").addEventListener("click", addTask);
@@ -157,11 +213,17 @@
       if (e.key === "Enter") addTask();
     });
     document.getElementById("clear").addEventListener("click", () => {
+      const doneIds = tasks.filter((t) => t.done).map((t) => t.id);
       tasks = tasks.filter((t) => !t.done);
-      save(); haptic("medium"); render();
+      removeTasks(doneIds); haptic("medium"); render();
     });
 
-    render();
+    // Обновляем список, когда вы возвращаетесь в приложение
+    document.addEventListener("visibilitychange", async () => {
+      if (!document.hidden) { await loadTasks(); render(); }
+    });
+
+    loadTasks().then(render);
   </script>
 </body>
 </html>
