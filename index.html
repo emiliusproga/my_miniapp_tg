@@ -3,31 +3,35 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Список дел</title>
+  <title>Дела и сон</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 20px 16px 40px;
+      padding: 16px 16px 40px;
       font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
       background: var(--tg-theme-bg-color, #ffffff);
       color: var(--tg-theme-text-color, #000000);
     }
     h1 { font-size: 22px; margin: 0 0 4px; }
-    #counter { color: var(--tg-theme-hint-color, #888888); margin: 0 0 4px; font-size: 14px; }
-    #status { color: var(--tg-theme-hint-color, #888888); margin: 0 0 16px; font-size: 12px; }
-    .add { display: flex; gap: 8px; margin-bottom: 16px; }
-    input[type="text"] {
+    h2 { font-size: 17px; margin: 24px 0 10px; }
+    .hint { color: var(--tg-theme-hint-color, #888888); font-size: 13px; }
+    #status { margin: 0 0 14px; font-size: 12px; }
+
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tab {
       flex: 1;
-      font-size: 16px;
-      padding: 12px;
-      border-radius: 10px;
-      border: 1px solid var(--tg-theme-hint-color, #cccccc);
       background: var(--tg-theme-secondary-bg-color, #f4f4f5);
       color: var(--tg-theme-text-color, #000000);
-      outline: none;
     }
+    .tab.active {
+      background: var(--tg-theme-button-color, #3390ec);
+      color: var(--tg-theme-button-text-color, #ffffff);
+    }
+    .page { display: none; }
+    .page.active { display: block; }
+
     button {
       font-size: 16px;
       padding: 12px 18px;
@@ -36,8 +40,39 @@
       background: var(--tg-theme-button-color, #3390ec);
       color: var(--tg-theme-button-text-color, #ffffff);
     }
+    button.secondary {
+      background: var(--tg-theme-secondary-bg-color, #f4f4f5);
+      color: var(--tg-theme-link-color, #3390ec);
+    }
+    button.full { width: 100%; }
+
+    input[type="text"], input[type="time"], input[type="date"] {
+      width: 100%;
+      font-size: 16px;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--tg-theme-hint-color, #cccccc);
+      background: var(--tg-theme-secondary-bg-color, #f4f4f5);
+      color: var(--tg-theme-text-color, #000000);
+      outline: none;
+      min-width: 0;
+    }
+    label { display: block; font-size: 13px; margin-bottom: 4px; color: var(--tg-theme-hint-color, #888888); }
+
+    .card {
+      background: var(--tg-theme-secondary-bg-color, #f4f4f5);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .row { display: flex; gap: 10px; }
+    .row > div { flex: 1; min-width: 0; }
+
+    /* дела */
+    .add { display: flex; gap: 8px; margin-bottom: 16px; }
+    .add input { flex: 1; }
     ul { list-style: none; margin: 0; padding: 0; }
-    li {
+    li.task, li.hist {
       display: flex;
       align-items: center;
       gap: 12px;
@@ -47,7 +82,7 @@
       background: var(--tg-theme-secondary-bg-color, #f4f4f5);
     }
     li.done span { text-decoration: line-through; opacity: 0.5; }
-    li span { flex: 1; word-break: break-word; }
+    li span.t { flex: 1; word-break: break-word; }
     li input[type="checkbox"] { width: 22px; height: 22px; }
     .del {
       padding: 4px 10px;
@@ -55,27 +90,112 @@
       background: transparent;
       color: var(--tg-theme-hint-color, #888888);
     }
-    #clear {
-      width: 100%;
-      margin-top: 8px;
-      background: var(--tg-theme-secondary-bg-color, #f4f4f5);
-      color: var(--tg-theme-link-color, #3390ec);
-    }
-    .empty { text-align: center; color: var(--tg-theme-hint-color, #888888); padding: 30px 0; }
+    #clear { margin-top: 8px; }
+    .empty { text-align: center; color: var(--tg-theme-hint-color, #888888); padding: 24px 0; }
+
+    /* сон */
+    .stats { display: flex; gap: 10px; margin-bottom: 12px; }
+    .stat { flex: 1; text-align: center; }
+    .stat b { display: block; font-size: 22px; margin-top: 4px; }
+    .seg { display: flex; gap: 8px; margin-bottom: 10px; }
+    .seg button { flex: 1; padding: 8px; font-size: 14px; }
+    svg.chart { width: 100%; height: auto; display: block; }
+    .bar { fill: var(--tg-theme-button-color, #3390ec); }
+    .bar.low { opacity: 0.45; }
+    .goal { stroke: var(--tg-theme-hint-color, #888888); stroke-dasharray: 4 4; stroke-width: 1; }
+    .axis { fill: var(--tg-theme-hint-color, #888888); font-size: 9px; }
+
+    .hist .info { flex: 1; }
+    .hist .dur { font-weight: 600; }
+    .hist .sub { font-size: 12px; color: var(--tg-theme-hint-color, #888888); }
+
+    .result-big { font-size: 40px; font-weight: 700; text-align: center; margin: 6px 0; }
+    .warn { color: #d9534f; }
+    .alt { display: inline-block; padding: 6px 12px; margin: 4px 6px 0 0; border-radius: 16px;
+           background: var(--tg-theme-bg-color, #ffffff); font-size: 14px; }
+    .tips li { margin-bottom: 8px; padding-left: 4px; line-height: 1.35; }
+    .tips { padding-left: 18px; list-style: disc; }
   </style>
 </head>
 <body>
-  <h1 id="title">Мои дела</h1>
-  <p id="counter"></p>
-  <p id="status"></p>
+  <h1 id="title">Мой помощник</h1>
+  <p id="status" class="hint"></p>
 
-  <div class="add">
-    <input type="text" id="input" placeholder="Новая задача..." maxlength="200">
-    <button id="addBtn">+</button>
+  <div class="tabs">
+    <button class="tab active" data-page="pageTasks">✅ Дела</button>
+    <button class="tab" data-page="pageSleep">😴 Сон</button>
   </div>
 
-  <ul id="list"></ul>
-  <button id="clear">Удалить выполненные</button>
+  <!-- ================= ДЕЛА ================= -->
+  <div id="pageTasks" class="page active">
+    <p id="counter" class="hint"></p>
+    <div class="add">
+      <input type="text" id="input" placeholder="Новая задача..." maxlength="200">
+      <button id="addBtn">+</button>
+    </div>
+    <ul id="list"></ul>
+    <button id="clear" class="secondary full">Удалить выполненные</button>
+  </div>
+
+  <!-- ================= СОН ================= -->
+  <div id="pageSleep" class="page">
+
+    <h2 style="margin-top:0">Записать сон</h2>
+    <div class="card">
+      <div style="margin-bottom:10px">
+        <label>Дата пробуждения</label>
+        <input type="date" id="sDate">
+      </div>
+      <div class="row" style="margin-bottom:12px">
+        <div><label>Лёг спать</label><input type="time" id="sBed" value="23:00"></div>
+        <div><label>Проснулся</label><input type="time" id="sWake" value="07:00"></div>
+      </div>
+      <button id="sSave" class="full">Сохранить</button>
+      <p id="sMsg" class="hint" style="margin:8px 0 0"></p>
+    </div>
+
+    <h2>Средний сон</h2>
+    <div class="stats">
+      <div class="card stat"><span class="hint">За неделю</span><b id="avgWeek">—</b><span class="hint" id="cntWeek"></span></div>
+      <div class="card stat"><span class="hint">За месяц</span><b id="avgMonth">—</b><span class="hint" id="cntMonth"></span></div>
+    </div>
+
+    <h2>График сна</h2>
+    <div class="seg">
+      <button id="r7" class="">7 дней</button>
+      <button id="r30" class="secondary">30 дней</button>
+    </div>
+    <div class="card"><div id="chart"></div></div>
+
+    <h2>Умный подъём</h2>
+    <div class="card">
+      <p class="hint" style="margin-top:0">Укажите, когда ляжете и до какого времени нужно встать. Я подберу время, которое попадает в конец цикла сна и никогда не позже вашего.</p>
+      <div class="row" style="margin-bottom:12px">
+        <div><label>Время отбоя</label><input type="time" id="wBed" value="23:30"></div>
+        <div><label>Встать не позже</label><input type="time" id="wLimit" value="07:30"></div>
+      </div>
+      <button id="wCalc" class="full">Рассчитать</button>
+      <div id="wResult" style="margin-top:14px"></div>
+    </div>
+
+    <h2>История сна</h2>
+    <ul id="history"></ul>
+
+    <h2>Советы по сну</h2>
+    <div class="card">
+      <p id="dynTip" style="margin-top:0"></p>
+      <ul class="tips" style="margin-bottom:0">
+        <li>Ложитесь и вставайте в одно и то же время, в том числе в выходные.</li>
+        <li>За 1–2 часа до сна уберите яркие экраны или включите тёплый свет и тёмную тему.</li>
+        <li>Кофеин лучше не пить за 6–8 часов до сна, а плотный ужин и алкоголь отложить.</li>
+        <li>В спальне должно быть тёмно, тихо и прохладно (около 18–20 °C).</li>
+        <li>Утром выйдите на дневной свет: это помогает настроить внутренние часы.</li>
+        <li>Если не уснули за 20–30 минут, встаньте, займитесь чем-то спокойным и вернитесь в постель, когда захочется спать.</li>
+        <li>Тренировки лучше заканчивать минимум за 2–3 часа до сна.</li>
+      </ul>
+      <p class="hint" style="margin-bottom:0">Это общие рекомендации, а не медицинская консультация. Если проблемы со сном долго не проходят, обратитесь к врачу.</p>
+    </div>
+  </div>
 
   <script>
     const tg = window.Telegram.WebApp;
@@ -83,100 +203,128 @@
     tg.expand();
 
     const user = tg.initDataUnsafe && tg.initDataUnsafe.user;
-    if (user) {
-      document.getElementById("title").textContent = "Дела: " + user.first_name;
-    }
+    if (user) document.getElementById("title").textContent = "Привет, " + user.first_name + "!";
 
-    const LOCAL_KEY = "tasks_v1";
-    const PREFIX = "t_";
     const hasCloud = !!(tg.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast("6.9"));
-    let tasks = [];
-
     document.getElementById("status").textContent = hasCloud
       ? "☁️ Синхронизация между устройствами включена"
-      : "Задачи хранятся только на этом устройстве";
+      : "Данные хранятся только на этом устройстве";
 
-    // ---------- Хранилище ----------
-    function loadLocal() {
-      try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; }
-      catch (e) { return []; }
+    const TASK_PREFIX = "t_";
+    const SLEEP_PREFIX = "s_";
+    const CFG_KEY = "wake_cfg";
+    const LOCAL_TASKS = "tasks_v1";
+    const LOCAL_SLEEP = "sleep_v1";
+    const GOAL_MIN = 8 * 60;
+
+    let tasks = [];
+    let sleeps = {};   // ключ: дата YYYY-MM-DD
+    let chartRange = 7;
+
+    // ---------- Облако ----------
+    function lsGet(k, def) {
+      try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? def : v; }
+      catch (e) { return def; }
     }
-    function saveLocal() {
-      try { localStorage.setItem(LOCAL_KEY, JSON.stringify(tasks)); } catch (e) {}
-    }
+    function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 
     function cloudGetKeys() {
-      return new Promise((resolve) => {
-        tg.CloudStorage.getKeys((err, keys) => resolve(err ? [] : (keys || [])));
-      });
+      return new Promise((res) => tg.CloudStorage.getKeys((e, k) => res(e ? [] : (k || []))));
     }
     function cloudGetItems(keys) {
-      return new Promise((resolve) => {
-        if (!keys.length) return resolve({});
-        tg.CloudStorage.getItems(keys, (err, values) => resolve(err ? {} : (values || {})));
+      return new Promise((res) => {
+        if (!keys.length) return res({});
+        tg.CloudStorage.getItems(keys, (e, v) => res(e ? {} : (v || {})));
       });
     }
+    function cloudSet(key, obj) { if (hasCloud) tg.CloudStorage.setItem(key, JSON.stringify(obj)); }
+    function cloudRemove(keys) { if (hasCloud && keys.length) tg.CloudStorage.removeItems(keys); }
 
-    function persistTask(task) {
-      saveLocal();
-      if (hasCloud) tg.CloudStorage.setItem(PREFIX + task.id, JSON.stringify(task));
-    }
-    function removeTasks(ids) {
-      saveLocal();
-      if (hasCloud && ids.length) {
-        tg.CloudStorage.removeItems(ids.map((id) => PREFIX + id));
-      }
-    }
+    function haptic(type) { if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred(type || "light"); }
 
-    async function loadTasks() {
-      const local = loadLocal();
+    async function loadAll() {
+      const localTasks = lsGet(LOCAL_TASKS, []);
+      const localSleep = lsGet(LOCAL_SLEEP, {});
+
       if (!hasCloud) {
-        tasks = local;
+        tasks = localTasks;
+        sleeps = localSleep;
         return;
       }
-      const keys = (await cloudGetKeys()).filter((k) => k.startsWith(PREFIX));
-      const items = await cloudGetItems(keys);
-      const fromCloud = [];
-      Object.values(items).forEach((v) => {
-        try { fromCloud.push(JSON.parse(v)); } catch (e) {}
+
+      const keys = await cloudGetKeys();
+      const items = await cloudGetItems(keys.filter((k) => k.startsWith(TASK_PREFIX) || k.startsWith(SLEEP_PREFIX)));
+
+      const cloudTasks = [];
+      const cloudSleeps = {};
+      Object.keys(items).forEach((k) => {
+        try {
+          const obj = JSON.parse(items[k]);
+          if (k.startsWith(TASK_PREFIX)) cloudTasks.push(obj);
+          else if (k.startsWith(SLEEP_PREFIX)) cloudSleeps[obj.date] = obj;
+        } catch (e) {}
       });
 
-      if (fromCloud.length === 0 && local.length > 0) {
-        // Первый запуск: переносим старые задачи в облако
-        tasks = local;
-        tasks.forEach((t) => tg.CloudStorage.setItem(PREFIX + t.id, JSON.stringify(t)));
+      // дела
+      if (cloudTasks.length === 0 && localTasks.length > 0) {
+        tasks = localTasks;
+        tasks.forEach((t) => cloudSet(TASK_PREFIX + t.id, t));
       } else {
-        tasks = fromCloud.sort((a, b) => b.id - a.id);
-        saveLocal();
+        tasks = cloudTasks.sort((a, b) => b.id - a.id);
+        lsSet(LOCAL_TASKS, tasks);
+      }
+
+      // сон
+      if (Object.keys(cloudSleeps).length === 0 && Object.keys(localSleep).length > 0) {
+        sleeps = localSleep;
+        Object.values(sleeps).forEach((s) => cloudSet(SLEEP_PREFIX + s.date, s));
+      } else {
+        sleeps = cloudSleeps;
+        lsSet(LOCAL_SLEEP, sleeps);
       }
     }
 
-    // ---------- Интерфейс ----------
-    function haptic(type) {
-      if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred(type || "light");
+    // ---------- Вкладки ----------
+    document.querySelectorAll(".tab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach((b) => b.classList.remove("active"));
+        document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById(btn.dataset.page).classList.add("active");
+        haptic();
+      });
+    });
+
+    // ================= ДЕЛА =================
+    function persistTask(task) {
+      lsSet(LOCAL_TASKS, tasks);
+      cloudSet(TASK_PREFIX + task.id, task);
+    }
+    function removeTasks(ids) {
+      lsSet(LOCAL_TASKS, tasks);
+      cloudRemove(ids.map((id) => TASK_PREFIX + id));
     }
 
-    function render() {
+    function renderTasks() {
       const list = document.getElementById("list");
       list.innerHTML = "";
-
       if (tasks.length === 0) {
         list.innerHTML = '<div class="empty">Задач пока нет. Добавьте первую!</div>';
       }
-
       tasks.forEach((task) => {
         const li = document.createElement("li");
-        if (task.done) li.className = "done";
+        li.className = "task" + (task.done ? " done" : "");
 
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.checked = task.done;
         cb.addEventListener("change", () => {
           task.done = cb.checked;
-          persistTask(task); haptic(); render();
+          persistTask(task); haptic(); renderTasks();
         });
 
         const text = document.createElement("span");
+        text.className = "t";
         text.textContent = task.text;
 
         const del = document.createElement("button");
@@ -184,7 +332,7 @@
         del.textContent = "✕";
         del.addEventListener("click", () => {
           tasks = tasks.filter((t) => t.id !== task.id);
-          removeTasks([task.id]); haptic("medium"); render();
+          removeTasks([task.id]); haptic("medium"); renderTasks();
         });
 
         li.append(cb, text, del);
@@ -192,10 +340,8 @@
       });
 
       const left = tasks.filter((t) => !t.done).length;
-      document.getElementById("counter").textContent =
-        "Осталось: " + left + " из " + tasks.length;
-      document.getElementById("clear").style.display =
-        tasks.some((t) => t.done) ? "block" : "none";
+      document.getElementById("counter").textContent = "Осталось: " + left + " из " + tasks.length;
+      document.getElementById("clear").style.display = tasks.some((t) => t.done) ? "block" : "none";
     }
 
     function addTask() {
@@ -205,25 +351,255 @@
       const task = { id: Date.now(), text: value, done: false };
       tasks.unshift(task);
       input.value = "";
-      persistTask(task); haptic(); render();
+      persistTask(task); haptic(); renderTasks();
     }
 
     document.getElementById("addBtn").addEventListener("click", addTask);
-    document.getElementById("input").addEventListener("keydown", (e) => {
-      if (e.key === "Enter") addTask();
-    });
+    document.getElementById("input").addEventListener("keydown", (e) => { if (e.key === "Enter") addTask(); });
     document.getElementById("clear").addEventListener("click", () => {
-      const doneIds = tasks.filter((t) => t.done).map((t) => t.id);
+      const ids = tasks.filter((t) => t.done).map((t) => t.id);
       tasks = tasks.filter((t) => !t.done);
-      removeTasks(doneIds); haptic("medium"); render();
+      removeTasks(ids); haptic("medium"); renderTasks();
     });
 
-    // Обновляем список, когда вы возвращаетесь в приложение
+    // ================= СОН =================
+    function pad(n) { return String(n).padStart(2, "0"); }
+    function dateStr(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+    function toMin(hhmm) { const p = hhmm.split(":"); return parseInt(p[0], 10) * 60 + parseInt(p[1], 10); }
+    function fromMin(m) { m = ((m % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + ":" + pad(m % 60); }
+    function fmtDur(m) {
+      const h = Math.floor(m / 60), mm = Math.round(m % 60);
+      return h + " ч " + pad(mm) + " мин";
+    }
+    function fmtDate(s) {
+      const p = s.split("-");
+      return p[2] + "." + p[1] + "." + p[0];
+    }
+
+    document.getElementById("sDate").value = dateStr(new Date());
+
+    document.getElementById("sSave").addEventListener("click", () => {
+      const date = document.getElementById("sDate").value;
+      const bed = document.getElementById("sBed").value;
+      const wake = document.getElementById("sWake").value;
+      const msg = document.getElementById("sMsg");
+      if (!date || !bed || !wake) { msg.textContent = "Заполните дату и оба времени."; return; }
+      let dur = (toMin(wake) - toMin(bed) + 1440) % 1440;
+      if (dur === 0) { msg.textContent = "Время отбоя и подъёма совпадает."; return; }
+      const entry = { date: date, bed: bed, wake: wake, min: dur };
+      sleeps[date] = entry;
+      lsSet(LOCAL_SLEEP, sleeps);
+      cloudSet(SLEEP_PREFIX + date, entry);
+      msg.textContent = "Сохранено: " + fmtDur(dur) + (sleeps[date] ? "" : "");
+      haptic("medium");
+      renderSleep();
+    });
+
+    function lastDays(n) {
+      const out = [];
+      const now = new Date();
+      for (let i = n - 1; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        out.push(dateStr(d));
+      }
+      return out;
+    }
+    function avgFor(n) {
+      const vals = lastDays(n).map((d) => sleeps[d]).filter(Boolean).map((s) => s.min);
+      if (!vals.length) return { avg: null, cnt: 0 };
+      return { avg: vals.reduce((a, b) => a + b, 0) / vals.length, cnt: vals.length };
+    }
+
+    function renderChart() {
+      const days = lastDays(chartRange);
+      const W = 340, H = 180, padL = 24, padB = 22, padT = 10;
+      const vals = days.map((d) => (sleeps[d] ? sleeps[d].min : 0));
+      const maxH = Math.max(10, Math.ceil(Math.max.apply(null, vals) / 60));
+      const plotW = W - padL - 4, plotH = H - padB - padT;
+      const slot = plotW / days.length;
+      const bw = Math.max(3, slot * 0.65);
+      const y = (min) => padT + plotH - (min / 60 / maxH) * plotH;
+
+      let svg = '<svg class="chart" viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg">';
+      for (let h = 0; h <= maxH; h += 2) {
+        svg += '<text class="axis" x="0" y="' + (y(h * 60) + 3) + '">' + h + "</text>";
+      }
+      svg += '<line class="goal" x1="' + padL + '" x2="' + (W - 4) + '" y1="' + y(GOAL_MIN) + '" y2="' + y(GOAL_MIN) + '"/>';
+      days.forEach((d, i) => {
+        const x = padL + i * slot + (slot - bw) / 2;
+        if (vals[i] > 0) {
+          const top = y(vals[i]);
+          svg += '<rect class="bar' + (vals[i] < 7 * 60 ? " low" : "") + '" x="' + x + '" y="' + top +
+                 '" width="' + bw + '" height="' + (padT + plotH - top) + '" rx="2"/>';
+        }
+        const showLabel = chartRange === 7 || i % 5 === 0 || i === days.length - 1;
+        if (showLabel) {
+          const p = d.split("-");
+          svg += '<text class="axis" text-anchor="middle" x="' + (x + bw / 2) + '" y="' + (H - 6) + '">' + p[2] + "." + p[1] + "</text>";
+        }
+      });
+      svg += "</svg>";
+      document.getElementById("chart").innerHTML = svg +
+        '<p class="hint" style="margin:6px 0 0">Пунктир: 8 часов. Бледные столбцы: меньше 7 часов.</p>';
+    }
+
+    function renderHistory() {
+      const ul = document.getElementById("history");
+      ul.innerHTML = "";
+      const entries = Object.values(sleeps).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 60);
+      if (!entries.length) {
+        ul.innerHTML = '<div class="empty">Записей пока нет.</div>';
+        return;
+      }
+      entries.forEach((s) => {
+        const li = document.createElement("li");
+        li.className = "hist";
+        const info = document.createElement("div");
+        info.className = "info";
+        const dur = document.createElement("div");
+        dur.className = "dur";
+        dur.textContent = fmtDur(s.min);
+        const sub = document.createElement("div");
+        sub.className = "sub";
+        sub.textContent = fmtDate(s.date) + " · " + s.bed + " → " + s.wake;
+        info.append(dur, sub);
+
+        const del = document.createElement("button");
+        del.className = "del";
+        del.textContent = "✕";
+        del.addEventListener("click", () => {
+          delete sleeps[s.date];
+          lsSet(LOCAL_SLEEP, sleeps);
+          cloudRemove([SLEEP_PREFIX + s.date]);
+          haptic("medium"); renderSleep();
+        });
+        li.append(info, del);
+        ul.appendChild(li);
+      });
+    }
+
+    function renderTip() {
+      const w = avgFor(7);
+      const el = document.getElementById("dynTip");
+      if (w.avg === null) {
+        el.textContent = "Запишите несколько ночей, и здесь появится совет по вашим данным. Взрослым обычно нужно 7–9 часов сна.";
+      } else if (w.avg < 6 * 60) {
+        el.textContent = "В среднем за неделю вы спите " + fmtDur(w.avg) + ". Это заметно меньше нормы 7–9 часов. Попробуйте ложиться на 30–60 минут раньше.";
+      } else if (w.avg < 7 * 60) {
+        el.textContent = "В среднем за неделю вы спите " + fmtDur(w.avg) + ". Немного не хватает до 7–9 часов. Сдвиньте отбой на 15–30 минут раньше.";
+      } else if (w.avg <= 9 * 60) {
+        el.textContent = "Средний сон за неделю: " + fmtDur(w.avg) + ". Это в пределах нормы 7–9 часов, держите режим.";
+      } else {
+        el.textContent = "В среднем за неделю вы спите " + fmtDur(w.avg) + ". Это больше обычной нормы. Если при этом чувствуете усталость, стоит обратить внимание на качество сна.";
+      }
+    }
+
+    function renderSleep() {
+      const w = avgFor(7), m = avgFor(30);
+      document.getElementById("avgWeek").textContent = w.avg === null ? "—" : fmtDur(w.avg);
+      document.getElementById("cntWeek").textContent = w.cnt ? "ночей: " + w.cnt + " из 7" : "нет данных";
+      document.getElementById("avgMonth").textContent = m.avg === null ? "—" : fmtDur(m.avg);
+      document.getElementById("cntMonth").textContent = m.cnt ? "ночей: " + m.cnt + " из 30" : "нет данных";
+      renderChart();
+      renderHistory();
+      renderTip();
+    }
+
+    function setRange(n) {
+      chartRange = n;
+      document.getElementById("r7").className = n === 7 ? "" : "secondary";
+      document.getElementById("r30").className = n === 30 ? "" : "secondary";
+      renderChart();
+    }
+    document.getElementById("r7").addEventListener("click", () => setRange(7));
+    document.getElementById("r30").addEventListener("click", () => setRange(30));
+
+    // ---------- Умный подъём ----------
+    const CYCLE = 90;      // минут в одном цикле
+    const FALL_ASLEEP = 15; // минут на засыпание
+    const MAX_CYCLES = 6;
+
+    function calcWake() {
+      const bed = document.getElementById("wBed").value;
+      const limit = document.getElementById("wLimit").value;
+      const box = document.getElementById("wResult");
+      if (!bed || !limit) { box.innerHTML = '<p class="warn">Укажите оба времени.</p>'; return; }
+
+      const b = toMin(bed), L = toMin(limit);
+      lsSet(CFG_KEY, { bed: bed, limit: limit });
+      cloudSet(CFG_KEY, { bed: bed, limit: limit });
+
+      const windowMin = (L - b + 1440) % 1440;
+      if (windowMin === 0) {
+        box.innerHTML = '<p class="warn">Время отбоя и время подъёма совпадают. Укажите разные значения.</p>';
+        return;
+      }
+
+      const avail = windowMin - FALL_ASLEEP;
+      const fit = Math.floor(avail / CYCLE);
+      const n = Math.min(fit, MAX_CYCLES);
+
+      // Время, которое нужно, чтобы набрать 5 циклов к крайнему сроку
+      const bedFor5 = fromMin(L - FALL_ASLEEP - 5 * CYCLE);
+
+      if (n < 1) {
+        box.innerHTML =
+          '<p class="warn"><b>Не хватает времени даже на один полный цикл сна.</b></p>' +
+          '<p>Между отбоем и крайним временем подъёма только ' + fmtDur(windowMin) + '. ' +
+          'Чтобы выспаться, лягте не позже <b>' + bedFor5 + '</b>.</p>';
+        return;
+      }
+
+      const wakeAt = (c) => fromMin(b + FALL_ASLEEP + c * CYCLE);
+      let html = '<div class="hint" style="text-align:center">Идеальное время подъёма</div>' +
+                 '<div class="result-big">' + wakeAt(n) + '</div>' +
+                 '<p style="text-align:center;margin:0 0 8px">' + n + ' ' + cyclesWord(n) +
+                 ' · сон около ' + fmtDur(n * CYCLE) + '</p>';
+
+      if (windowMin - FALL_ASLEEP - n * CYCLE >= 0 && wakeAt(n) !== limit) {
+        html += '<p class="hint" style="text-align:center;margin:0 0 8px">Это раньше вашего крайнего времени (' + limit + ') и не позже него.</p>';
+      }
+
+      if (n < 5) {
+        html += '<p class="warn">Это меньше рекомендуемых 5–6 циклов (7,5–9 часов). Чтобы выспаться, лягте не позже <b>' + bedFor5 + '</b>.</p>';
+      }
+
+      const alts = [];
+      for (let c = n - 1; c >= Math.max(1, n - 2); c--) alts.push(c);
+      if (alts.length) {
+        html += '<div class="hint">Более ранние варианты:</div>';
+        alts.forEach((c) => {
+          html += '<span class="alt">' + wakeAt(c) + ' · ' + c + ' ' + cyclesWord(c) + '</span>';
+        });
+      }
+      box.innerHTML = html;
+      haptic("medium");
+    }
+
+    function cyclesWord(n) {
+      if (n === 1) return "цикл";
+      if (n >= 2 && n <= 4) return "цикла";
+      return "циклов";
+    }
+    document.getElementById("wCalc").addEventListener("click", calcWake);
+
+    // ---------- Запуск ----------
+    async function init() {
+      await loadAll();
+      const cfg = lsGet(CFG_KEY, null);
+      if (cfg && cfg.bed && cfg.limit) {
+        document.getElementById("wBed").value = cfg.bed;
+        document.getElementById("wLimit").value = cfg.limit;
+      }
+      renderTasks();
+      renderSleep();
+    }
+
     document.addEventListener("visibilitychange", async () => {
-      if (!document.hidden) { await loadTasks(); render(); }
+      if (!document.hidden) { await loadAll(); renderTasks(); renderSleep(); }
     });
 
-    loadTasks().then(render);
+    init();
   </script>
 </body>
 </html>
