@@ -58,6 +58,17 @@
   .nav button { flex: 1; background: transparent; color: var(--tg-theme-hint-color, #888); font-size: 11px; padding: 6px 2px; }
   .nav button span { display: block; font-size: 20px; }
   .nav button.active { color: var(--tg-theme-button-color, #3390ec); }
+  .modal { position: fixed; inset: 0; z-index: 100; display: none; align-items: center; justify-content: center;
+           background: rgba(0,0,0,.55); padding: 20px; overflow: hidden; }
+  .modal.show { display: flex; }
+  .modal-card { position: relative; z-index: 2; max-width: 340px; width: 100%; text-align: center; border-radius: 18px;
+                padding: 28px 20px 22px; background: var(--tg-theme-bg-color, #fff); color: var(--tg-theme-text-color, #000);
+                animation: pop .35s ease-out; }
+  .trophy { font-size: 64px; line-height: 1; }
+  .confetti { position: absolute; top: -16px; width: 8px; height: 14px; border-radius: 2px; opacity: .9; z-index: 1;
+              animation: fall linear infinite; }
+  @keyframes pop { from { transform: scale(.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
 </style>
 </head>
 <body>
@@ -198,6 +209,16 @@
     <button id="gvProg" class="secondary">Прогресс</button>
   </div>
   <div id="goalBox"></div>
+</div>
+  <div id="congrats" class="modal">
+  <div id="confettiBox" style="position:absolute;inset:0;pointer-events:none"></div>
+  <div class="modal-card">
+    <div class="trophy">🏆</div>
+    <h2 id="cgTitle" style="margin:12px 0 6px">Поздравляем!</h2>
+    <p id="cgText" style="margin:0 0 6px"></p>
+    <p id="cgGoal" style="font-weight:600;margin:0 0 18px"></p>
+    <button id="cgOk" class="full">Ура! 🎉</button>
+  </div>
 </div>
 
 <nav class="nav">
