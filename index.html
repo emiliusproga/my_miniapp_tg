@@ -110,7 +110,12 @@
     <div class="card stat"><span class="hint">За неделю</span><b id="avgWeek">—</b><span class="hint" id="cntWeek"></span></div>
     <div class="card stat"><span class="hint">За месяц</span><b id="avgMonth">—</b><span class="hint" id="cntMonth"></span></div>
   </div>
-
+    <h2 id="recTitle">Рекорды месяца</h2>
+  <div class="grid2">
+    <div class="card stat"><span class="hint">Самый поздний отбой</span><b id="recBed">—</b><span class="hint" id="recBedD"></span></div>
+    <div class="card stat"><span class="hint">Самый ранний подъём</span><b id="recWake">—</b><span class="hint" id="recWakeD"></span></div>
+  </div>
+  <p class="hint" id="recPrev" style="margin:-4px 0 0"></p>
   <h2>График сна</h2>
   <div class="seg"><button id="r7">7 дней</button><button id="r30" class="secondary">30 дней</button></div>
   <div class="card"><div id="chart"></div></div>
@@ -417,13 +422,29 @@ function renderSleepChart() {
     days.map((d) => (D.sleeps[d] ? Math.round(D.sleeps[d].min / 6) / 10 : 0)),
     { goal: 8, low: 7, note: "Значения в часах. Пунктир: 8 часов, бледные столбцы: меньше 7 часов." });
 }
+function monthRecords(key) {
+  const es = Object.values(D.sleeps).filter((s) => s.date.startsWith(key));
+  if (!es.length) return null;
+  const bedAdj = (s) => { const m = toMin(s.bed); return m < 720 ? m + 1440 : m; };
+  const late = es.reduce((a, b) => (bedAdj(b) > bedAdj(a) ? b : a));
+  const early = es.reduce((a, b) => (toMin(b.wake) < toMin(a.wake) ? b : a));
+  return { late: late, early: early };
+}
+function renderRecords() {
+  const now = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const cur = monthRecords(today().slice(0, 7)), old = monthRecords(dateStr(prev).slice(0, 7));
+  $("recTitle").textContent = "Рекорды: " + MONTHS[now.getMonth()].toLowerCase() + " " + now.getFullYear();
+  $("recBed").textContent = cur ? cur.late.bed : "—";
+  $("recBedD").textContent = cur ? "запись за " + fmtShort(cur.late.date) : "нет данных";
+  $("recWake").textContent = cur ? cur.early.wake : "—";
+  $("recWakeD").textContent = cur ? "запись за " + fmtShort(cur.early.date) : "нет данных";
+  $("recPrev").textContent = old
+    ? "Прошлый месяц (" + MONTHS[prev.getMonth()].toLowerCase() + "): самый поздний отбой " + old.late.bed + ", самый ранний подъём " + old.early.wake + "."
+    : "";
+}
 function renderSleep() {
-  const w = avgFor(7), m = avgFor(30);
-  $("avgWeek").textContent = w.avg === null ? "—" : fmtDur(w.avg);
-  $("cntWeek").textContent = w.cnt ? "ночей: " + w.cnt + " из 7" : "нет данных";
-  $("avgMonth").textContent = m.avg === null ? "—" : fmtDur(m.avg);
-  $("cntMonth").textContent = m.cnt ? "ночей: " + m.cnt + " из 30" : "нет данных";
-  renderSleepChart();
+  renderRecords();
 
   const ul = $("history"); ul.innerHTML = "";
   const entries = Object.values(D.sleeps).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 60);
@@ -666,8 +687,7 @@ function quickAdd(ph, cb) {
   return r;
 }
 function addGoal(kind, title, extra) {
-  const g = Object.assign({ id: Date.now() + Math.floor(Math.random() * 1000), title: title, kind: kind, subs: [], pct: 0, deadline: "", parent: "" }, extra);
-  D.goals.push(g); put("goals", g); haptic("medium"); renderGoals();
+  if ((kind === "year" || kind === "month") && extra.year < new Date().getFullYear()) return;
 }
 
 function goalCard(g, nested) {
@@ -729,7 +749,7 @@ function viewYear(box) {
   const gs = yearGoals(goalYear);
   const sum = h("div", "card");
   sum.append(h("b", null, "Цели на " + goalYear + " год"),
-    h("div", "hint", gs.length ? "Общий прогресс: " + avgP(gs) + "% · целей: " + gs.length : "Добавьте первую годовую цель."),
+    h("div", "hint", gs.length ? "Общий прогресс: " + avgP(gs) + "% · целей: " + gs.length : (goalYear < new Date().getFullYear() ? "За этот год цели не вносились." : "Добавьте первую годовую цель.")),
     barEl(avgP(gs)),
     quickAdd("Новая цель на год...", (v) => addGoal("year", v, { year: goalYear, deadline: goalYear + "-12-31" })));
   box.append(sum);
@@ -786,7 +806,7 @@ function viewProg(box) {
     c1.append(h("div", null, msg));
     c1.lastChild.style.marginTop = "8px";
   } else if (!base.length) {
-    c1.append(h("div", "hint", "Добавьте цели на год или на месяцы, и здесь появится сравнение с графиком."));
+    c1.append(h("div", "hint", (goalYear < new Date().getFullYear() ? "За этот год цели не вносились." : "Добавьте цели на год или на месяцы, и здесь появится сравнение с графиком.")));
   }
   box.append(c1);
 
@@ -840,7 +860,7 @@ function confetti(box) {
   }
 }
 function showCongrats(g) {
-  $("cgTitle").textContent = "Поздравляем" + (user ? ", " + user.first_name : "") + "!";
+  $("cgTitle").textContent = "Поздравляем" + ", Эмиль Рустамович" + "!";
   $("cgText").textContent = "Годовая цель на " + g.year + " год выполнена на 100%.";
   $("cgGoal").textContent = "🎯 " + g.title;
   const box = $("confettiBox"); box.innerHTML = ""; confetti(box);
@@ -874,6 +894,12 @@ function renderGoals() {
   $("gYear").textContent = goalYear;
   const box = $("goalBox"); box.innerHTML = "";
   ({ year: viewYear, months: viewMonths, other: viewOther, prog: viewProg })[goalView](box);
+  if (goalYear < new Date().getFullYear() && (goalView === "year" || goalView === "months")) {
+    box.querySelectorAll(".add, .del").forEach((e) => e.remove());
+    box.querySelectorAll("input, select").forEach((e) => (e.disabled = true));
+    const has = D.goals.some((g) => (g.kind === "year" || g.kind === "month") && g.year === goalYear);
+    box.prepend(h("div", "card", "🔒 Прошедший год: цели можно только смотреть. " + (has ? "Добавлять и менять их нельзя." : "За этот год цели не вносились.")));
+  }
   window.scrollTo(0, y);
   checkCelebrate();
 }
@@ -919,7 +945,7 @@ function renderHome() {
   const hr = parseInt(now.toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: "America/New_York" }), 10) % 24;
   const hello = hr < 5 ? "Доброй ночи" : hr < 12 ? "Доброе утро" : hr < 18 ? "Добрый день" : "Добрый вечер";
   const dateTxt = now.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
-  let s = "<h1>" + hello + (user ? ", " + esc(user.first_name) : "") + "!</h1><p class=\"hint\" style=\"margin:0 0 14px\">" + dateTxt + "</p>";
+  let s = "<h1>" + hello + ", Эмиль Рустамович" + "!</h1><p class=\"hint\" style=\"margin:0 0 14px\">" + dateTxt + "</p>";
 
   s += '<div class="grid2" style="margin-bottom:12px"><div class="card stat"><span class="hint">Атлантик-Сити</span><b>' + timeIn("America/New_York") +
        '</b></div><div class="card stat"><span class="hint">Москва</span><b>' + timeIn("Europe/Moscow") + "</b></div></div>";
