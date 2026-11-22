@@ -286,41 +286,54 @@ function lsGet(k, def) { try { const v = JSON.parse(localStorage.getItem(k)); re
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 function saveLocal() { for (const c in COLS) lsSet(COLS[c][1], D[c]); }
 
-const cloudGetKeys = () => new Promise((res) => tg.CloudStorage.getKeys((e, k) => res(e ? [] : (k || []))));
+function withTimeout(fn, ms) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("timeout")), ms);
+    fn((err, val) => { clearTimeout(t); if (err) reject(new Error(String(err))); else resolve(val); });
+  });
+}
+const cloudGetKeys = () => withTimeout((cb) => tg.CloudStorage.getKeys(cb), 8000).then((k) => k || []);
 function cloudGetItems(keys) {
   const chunks = [];
   for (let i = 0; i < keys.length; i += 50) chunks.push(keys.slice(i, i + 50));
-  return Promise.all(chunks.map((ks) => new Promise((res) =>
-    tg.CloudStorage.getItems(ks, (e, v) => res(e ? {} : (v || {})))))).then((arr) => Object.assign({}, ...arr));
+  return Promise.all(chunks.map((ks) => withTimeout((cb) => tg.CloudStorage.getItems(ks, cb), 8000).then((v) => v || {})))
+    .then((arr) => Object.assign({}, ...arr));
 }
 function cloudSet(key, obj) { if (hasCloud) tg.CloudStorage.setItem(key, JSON.stringify(obj)); }
 function cloudRemove(keys) { if (hasCloud && keys.length) tg.CloudStorage.removeItems(keys); }
 function put(c, obj) { saveLocal(); cloudSet(COLS[c][0] + (obj.id != null ? obj.id : obj.date), obj); }
 function drop(c, key) { saveLocal(); cloudRemove([COLS[c][0] + key]); }
 
+let syncOk = true;
 async function loadAll() {
   const local = {};
   for (const c in COLS) local[c] = lsGet(COLS[c][1], isArr(c) ? [] : {});
   if (!hasCloud) { Object.assign(D, local); return; }
-
-  const keys = await cloudGetKeys();
-  const items = await cloudGetItems(keys.filter((k) => Object.values(COLS).some((v) => k.startsWith(v[0]))));
-  const cloud = {};
-  for (const c in COLS) cloud[c] = isArr(c) ? [] : {};
-  Object.keys(items).forEach((k) => {
-    try {
-      const o = JSON.parse(items[k]);
-      for (const c in COLS) if (k.startsWith(COLS[c][0])) { if (isArr(c)) cloud[c].push(o); else cloud[c][o.date] = o; }
-    } catch (e) {}
-  });
-  for (const c in COLS) {
-    if (isEmpty(cloud[c]) && !isEmpty(local[c])) {
-      D[c] = local[c];
-      (Array.isArray(local[c]) ? local[c] : Object.values(local[c])).forEach((o) => put(c, o));
-    } else D[c] = cloud[c];
+  try {
+    const keys = await cloudGetKeys();
+    const items = await cloudGetItems(keys.filter((k) => Object.values(COLS).some((v) => k.startsWith(v[0]))));
+    const cloud = {};
+    for (const c in COLS) cloud[c] = isArr(c) ? [] : {};
+    Object.keys(items).forEach((k) => {
+      try {
+        const o = JSON.parse(items[k]);
+        for (const c in COLS) if (k.startsWith(COLS[c][0])) { if (isArr(c)) cloud[c].push(o); else cloud[c][o.date] = o; }
+      } catch (e) {}
+    });
+    for (const c in COLS) {
+      if (isEmpty(cloud[c]) && !isEmpty(local[c])) {
+        D[c] = local[c];
+        (Array.isArray(local[c]) ? local[c] : Object.values(local[c])).forEach((o) => put(c, o));
+      } else D[c] = cloud[c];
+    }
+    D.tasks.sort((a, b) => b.id - a.id);
+    saveLocal();
+    syncOk = true;
+  } catch (e) {
+    console.error(e);
+    syncOk = false; // облако не ответило: оставляем данные с устройства и ничего не перезаписываем в облаке
+    Object.assign(D, local);
   }
-  D.tasks.sort((a, b) => b.id - a.id);
-  saveLocal();
 }
 
 // ---------- Навигация ----------
@@ -987,18 +1000,52 @@ function renderHome() {
 }
 
 // ---------- Запуск ----------
-function renderAll() { renderTasks(); renderSleep(); renderPush(); renderGym(); renderGoals(); renderHome(); }
-async function init() {
-  $("status").textContent = hasCloud ? "☁️ Синхронизация между устройствами включена" : "Данные хранятся только на этом устройстве";
+// ---------- Запуск ----------
+function safe(fn) { try { fn(); } catch (e) { console.error(e); } }
+function renderAll() { [renderTasks, renderSleep, renderPush, renderGym, renderGoals, renderHome].forEach(safe); }
+
+let syncing = false;
+function setStatus() {
+  $("status").textContent = !hasCloud ? "Данные хранятся только на этом устройстве"
+    : syncing ? "⏳ Синхронизация…"
+    : syncOk ? "☁️ Синхронизация между устройствами включена"
+    : "⚠️ Нет связи с облаком Telegram, показаны данные с этого устройства";
+}
+async function sync(retries) {
+  if (syncing) return;
+  syncing = true; setStatus();
   await loadAll();
+  syncing = false; setStatus();
+  renderAll();
+  if (!syncOk && retries > 0) setTimeout(() => sync(retries - 1), 3000);
+}
+const refreshWeather = () => loadWeather().then(() => lsSet("wx_cache", wx));
+
+function init() {
   const cfg = lsGet("wake_cfg", null);
   if (cfg && cfg.bed && cfg.limit) { $("wBed").value = cfg.bed; $("wLimit").value = cfg.limit; }
-  renderAll();
-  loadWeather();
+
+  // 1) мгновенно показываем то, что сохранено на устройстве
+  for (const c in COLS) D[c] = lsGet(COLS[c][1], isArr(c) ? [] : {});
+  D.tasks.sort((a, b) => b.id - a.id);
+  Object.assign(wx, lsGet("wx_cache", {}));
+  setStatus();
+  [renderTasks, renderSleep, renderPush, renderGym, renderHome].forEach(safe);
+
+  // 2) затем подтягиваем свежие данные из облака и погоду
+  sync(3);
+  refreshWeather();
   setInterval(() => { if ($("pHome").classList.contains("active")) renderHome(); }, 30000);
 }
-document.addEventListener("visibilitychange", async () => {
-  if (!document.hidden) { await loadAll(); renderAll(); if (Date.now() - wxAt > 600000) loadWeather(); }
+
+// при открытии вкладки перерисовываем её свежими данными
+document.querySelectorAll(".nav button").forEach((b) => b.addEventListener("click", () => {
+  const R = { pTasks: renderTasks, pSleep: renderSleep, pWork: () => { renderPush(); renderGym(); }, pGoals: renderGoals };
+  if (R[b.dataset.page]) safe(R[b.dataset.page]);
+}));
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) { sync(1); if (Date.now() - wxAt > 600000) refreshWeather(); }
 });
 init();
 </script>
