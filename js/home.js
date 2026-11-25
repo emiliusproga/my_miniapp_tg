@@ -49,11 +49,11 @@ function renderHome() {
     return r + "</div>";
   });
 
-  s += sec(() => {
-    const left = D.tasks.filter((t) => !t.done);
+    s += sec(() => {
+    const left = D.tasks.filter((t) => !t.done), td = tasksToday();
     return '<div class="card link" data-go="pTasks"><b>✅ Дела</b><div>' +
-      (D.tasks.length ? "Осталось: " + left.length + " из " + D.tasks.length : "Задач пока нет") + "</div>" +
-      left.slice(0, 3).map((t) => '<div class="hint">• ' + esc(t.text) + "</div>").join("") + "</div>";
+      (D.tasks.length ? "На сегодня: " + td.length + " · всего осталось: " + left.length : "Задач пока нет") + "</div>" +
+      td.slice(0, 3).map((t) => '<div class="hint">• ' + prioIcon(t) + esc(t.text) + "</div>").join("") + "</div>";
   });
 
   s += sec(() => {
