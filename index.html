@@ -18,13 +18,40 @@
 <!-- ===== ДЕЛА ===== -->
 <div id="pTasks" class="page">
   <h1>Дела</h1>
-  <p id="counter" class="hint"></p>
-  <div class="add" style="margin-top:0;margin-bottom:16px">
-    <input type="text" id="input" placeholder="Новая задача..." maxlength="200">
-    <button id="addBtn">+</button>
+  <div class="card" style="margin-top:12px">
+    <div class="add" style="margin-top:0">
+      <input type="text" id="input" placeholder="Новая задача..." maxlength="200">
+      <button id="addBtn">+</button>
+    </div>
+    <button id="tMore" class="secondary full" style="margin-top:8px;padding:8px;font-size:14px">Параметры ▾</button>
+    <div id="tOpts" style="display:none;margin-top:10px">
+      <div class="row" style="margin-bottom:10px">
+        <div><label>Срок</label><input type="date" id="tDue"></div>
+        <div><label>Время</label><input type="time" id="tTime"></div>
+      </div>
+      <div class="row" style="margin-bottom:10px">
+        <div><label>Приоритет</label><select id="tPri"></select></div>
+        <div><label>Повтор</label><select id="tRep"></select></div>
+      </div>
+      <label>Категория</label>
+      <input type="text" id="tCat" list="catList" maxlength="30" placeholder="Например, учёба">
+      <datalist id="catList"></datalist>
+    </div>
   </div>
+
+  <div class="seg" id="tViews">
+    <button data-view="today">Сегодня</button>
+    <button data-view="week" class="secondary">Неделя</button>
+    <button data-view="all" class="secondary">Все</button>
+    <button data-view="done" class="secondary">Готово</button>
+  </div>
+  <div class="row" style="margin-bottom:10px;align-items:center">
+    <select id="tCatFilter"></select>
+    <button id="tSort" class="secondary" style="flex:0 0 auto;padding:10px 14px;font-size:14px">⇅ Авто</button>
+  </div>
+  <p id="counter" class="hint"></p>
   <ul id="list"></ul>
-  <button id="clear" class="secondary full">Удалить выполненные</button>
+  <button id="clear" class="secondary full">Очистить выполненные</button>
 </div>
 
 <!-- ===== СОН ===== -->
